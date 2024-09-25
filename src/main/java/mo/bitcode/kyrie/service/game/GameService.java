@@ -1,18 +1,18 @@
 package mo.bitcode.kyrie.service.game;
 
-import mo.bitcode.core.service.rest_template.Service;
-import mo.bitcode.kyrie.service.game.model.Game;
-import mo.bitcode.kyrie.service.pool.on_going_game.model.TeamAssertResult;
-import org.springframework.data.domain.Page;
+import mo.bitcode.kyrie.service.game.model.EnterGameResponse;
+import mo.bitcode.kyrie.service.game.model.GameDto;
+import mo.bitcode.kyrie.service.game.model.GameEndedDto;
+import mo.bitcode.kyrie.service.game.model.GameType;
+import mo.bitcode.kyrie.service.team.model.TeamDto;
 
-public interface GameService extends Service<Game> {
+import java.util.List;
 
-  Page<Game> getByTeamId(long teamId, int pageRequest);
+public interface GameService {
 
-  void findGame(long teamId, long latitude, long longitude);
-
-  void startGame(long teamId);
-
-  void endGame(TeamAssertResult teamAssertResult);
+  EnterGameResponse enterFindGame(GameType gameType, TeamDto teamDto, List<String> availableLocations);
+  GameDto get(String gameId);
+  GameDto onGameEnded(GameEndedDto gameEndedDto);
+  void validateUserNotInOtherGameOrQueue(List<String> userIds);
 
 }

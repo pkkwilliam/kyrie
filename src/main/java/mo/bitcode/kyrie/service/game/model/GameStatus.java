@@ -2,9 +2,9 @@ package mo.bitcode.kyrie.service.game.model;
 
 public enum GameStatus {
 
-  CONFIRMING,
-  ON_GOING,
-  END,
-  DISPUTE
+  DISCUSS_MEETING_LOCATION_AND_TIME,
+  PENDING_START,
+  STARTED,
+  ENDED,
 
 }

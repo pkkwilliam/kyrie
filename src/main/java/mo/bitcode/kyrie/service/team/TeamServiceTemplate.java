@@ -1,40 +1,106 @@
 package mo.bitcode.kyrie.service.team;
 
-import mo.bitcode.core.service.rest_template.query.AbstractQueryServiceTemplate;
+import mo.bitcode.kyrie.common.bedrock.rest_template.KyrieMongoAbstractServiceTemplate;
+import mo.bitcode.kyrie.common.exception.KyrieException;
+import mo.bitcode.kyrie.common.exception.KyrieExceptionCode;
+import mo.bitcode.kyrie.common.util.CommonUtil;
+import mo.bitcode.kyrie.repo.mongo.TeamMongoDbRepository;
+import mo.bitcode.kyrie.repo.mongo.entity.TeamEntity;
 import mo.bitcode.kyrie.service.application_config.ApplicationConfigService;
 import mo.bitcode.kyrie.service.application_config.model.ApplicationConfig;
-import mo.bitcode.kyrie.service.team.model.Team;
-import mo.bitcode.kyrie.service.team.model.TeamQueryRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.data.jpa.domain.Specification;
+import mo.bitcode.kyrie.service.team.model.TeamDto;
+import mo.bitcode.kyrie.service.team.model.TeamStatus;
+import mo.bitcode.kyrie.service.team.model.TeamType;
+import org.bson.types.ObjectId;
+import org.springframework.http.HttpStatus;
 
-public abstract class TeamServiceTemplate extends AbstractQueryServiceTemplate<Team, TeamQueryRequest> implements TeamService {
+import java.util.List;
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(TeamServiceTemplate.class);
+public abstract class TeamServiceTemplate extends KyrieMongoAbstractServiceTemplate<TeamEntity> implements TeamService {
+
   private ApplicationConfigService applicationConfigService;
+  private TeamMongoDbRepository teamMongoDbRepository;
 
-  public TeamServiceTemplate(ApplicationConfigService applicationConfigService, TeamRepository teamRepository) {
-    super(teamRepository);
+  public TeamServiceTemplate(ApplicationConfigService applicationConfigService,
+                             TeamMongoDbRepository teamMongoDbRepository) {
+    super(teamMongoDbRepository);
     this.applicationConfigService = applicationConfigService;
+    this.teamMongoDbRepository = teamMongoDbRepository;
   }
 
   @Override
-  public Team create(Team requestChild) {
+  public TeamDto create(ObjectId captainId, TeamType teamType, String name, List<ObjectId> teamMemberIds) {
     final ApplicationConfig applicationConfig = this.applicationConfigService.getApplicationConfig();
-    requestChild.setRating(applicationConfig.getTeamConfig().getCreateTeamDefaultRating());
-    requestChild.setSeason(applicationConfig.getSeason());
-    return super.create(requestChild);
+    final TeamEntity teamEntity = TeamEntity.builder()
+      .captainId(captainId)
+      .name(name)
+      .rating(applicationConfig.getTeamConfig().getCreateTeamDefaultRating())
+      .season(applicationConfig.getSeason())
+      .status(TeamStatus.ACTIVE)
+      .teamMemberIds(teamMemberIds)
+      .teamType(teamType)
+      .build();
+    return this.getTransformer().transform(this.create(teamEntity));
   }
 
   @Override
-  protected Specification<Team> generateBasicSpecification(TeamQueryRequest teamQueryRequest) {
+  public List<TeamDto> getUserTeams(String userId) {
+    return this.getTransformer().transform(this.teamMongoDbRepository.findAllByTeamMemberIdsIn(CommonUtil.toObjectId(List.of(userId))));
+  }
+
+  @Override
+  public TeamDto getDto(String teamId) {
+    return this.getDto(new ObjectId(teamId));
+  }
+
+  @Override
+  public TeamDto getDto(ObjectId teamId) {
+    final TeamEntity teamEntity = this.teamMongoDbRepository.findById(teamId).orElse(null);
+    if (teamEntity == null) {
+      throw new KyrieException(KyrieExceptionCode.TEAM_NOT_EXISTED);
+    }
+    return this.getTransformer().transform(teamEntity);
+  }
+
+  @Override
+  public List<TeamDto> getTeams(List<String> teamIds) {
+    return this.getTeamsByRawIds(CommonUtil.toObjectId(teamIds));
+  }
+
+  @Override
+  public List<TeamDto> getTeamsByRawIds(List<ObjectId> teamIds) {
+    final List<TeamEntity> entities = this.teamMongoDbRepository.findAllByIdIn(teamIds);
+    return this.getTransformer().transform(entities);
+  }
+
+  @Override
+  public List<TeamDto> getTeamsByUserIds(List<String> userIds) {
     return null;
   }
 
   @Override
-  protected Logger getLogger() {
-    return LOGGER;
+  public void validateUserIsCaptain(ObjectId userId, TeamDto teamDto) {
+    final boolean userIsCaptain = this.userIsCaptain(userId, teamDto);
+    if (!userIsCaptain) {
+      throw new KyrieException(HttpStatus.BAD_REQUEST, "400", "User Is Not Captain");
+    }
+  }
+
+  @Override
+  public void validateUserIsCaptain(ObjectId userId, String teamId) {
+
+  }
+
+  public boolean userIsCaptain(ObjectId userId, TeamEntity teamEntity) {
+    return userId.equals(teamEntity.getCaptainId());
+  }
+
+  public boolean userIsCaptain(ObjectId userId, TeamDto teamDto) {
+    return userId.toString().equals(teamDto.getCaptainId());
+  }
+
+  protected TeamTransformer getTransformer() {
+    return new TeamTransformer();
   }
 
 }
